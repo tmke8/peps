@@ -1,0 +1,575 @@
+PEP: 9999
+Title: Leading-Dot Value Patterns
+Author: Thomas Kehrenberg <tmke8@posteo.net>
+Discussions-To: https://discuss.python.org/t/pattern-matching-on-constants-that-arent-in-a-namespace-especially-sentinels/107916
+Status: Draft
+Type: Standards Track
+Created: 20-Jul-2026
+Python-Version: 3.16
+
+
+Abstract
+========
+
+This PEP extends the value patterns of structural pattern matching
+(:pep:`634`) to unqualified names.  A name prefixed with a dot, as in
+``case .MISSING:``, is looked up using the normal name resolution
+rules and compared to the match subject by equality, instead of being
+treated as a capture pattern.  This makes it possible to match against
+constants that are not accessed through a namespace, including sentinel
+values as introduced by :pep:`661` in Python 3.15, without using guards
+or wrapper namespaces.
+
+The leading-dot rule was part of early drafts of :pep:`622` and was
+dropped from the final proposal with the explicit note that it "could be
+added back later with no backward-compatibility issues".  This PEP
+proposes to add that rule.
+
+
+Motivation
+==========
+
+Structural pattern matching distinguishes two kinds of name patterns:
+
+* A bare name such as ``side`` is a *capture pattern*: it always matches
+  and binds the subject to that name.
+* A dotted name such as ``Color.RED`` or ``dataclasses.MISSING`` is a
+  *value pattern*: the name is looked up and the result is compared to
+  the subject by equality.
+
+There is deliberately no way to use an unqualified name as a value
+pattern.  :pep:`635` recommends collecting constants in namespaces such
+as enums or classes so that they can be spelled as dotted names.  When a
+constant is not in a namespace, using its unqualified name creates a
+capture pattern rather than a value pattern.  Therefore, in the following,
+the first case does *not* check whether ``options['proxy']`` is equal to
+``MISSING``::
+
+    MISSING = sentinel('MISSING')
+
+    def configure_proxy(options):
+        match options:
+            case {"proxy": MISSING}:  # MISSING captures any value
+                autodetect_proxy()
+            case {"proxy": None}:
+                disable_proxy()
+            case {"proxy": ProxyConfig(host=host, port=port)}:
+                connect(host, port)
+
+The use of the sentinel here is not frivolous: ``None`` cannot represent
+"no setting given" because it already represents a meaningful setting
+("proxy explicitly disabled"). ``MISSING`` is therefore used for the
+"no setting given" case.
+
+If the constant were namespaced, as in
+``case {"proxy": Defaults.MISSING}``, this would perform a comparison, while
+``case {"proxy": MISSING}`` instead captures the value associated with
+``"proxy"``.  The mapping pattern remains refutable because the key may
+be absent, so the compiler accepts it.  For any mapping containing that
+key, however, the first case matches regardless of the associated value
+and prevents the later cases from being reached.  It also binds a local
+name that shadows the module-level constant.  Linters and type checkers
+detect some instances of this error, but the pattern syntax does not
+provide a direct way to express a value pattern for an unqualified name.
+
+Sentinel values
+---------------
+
+:pep:`661` (Python 3.15) added the ``sentinel()`` builtin, providing a
+standard way to define constants such as ``MISSING`` above.  Such
+constants are useful when other values, including ``None``, already have
+defined meanings.  Sentinels are typically bound to module-level names.
+With this PEP, the sentinel case can be written as::
+
+    case {"proxy": .MISSING}:
+        autodetect_proxy()
+
+Without this proposal, a bare name has capture semantics and there may be
+no namespace through which to qualify ``MISSING``.  As sentinel values are
+adopted by standard-library and third-party APIs, code using those APIs may
+need to match values that are exported under unqualified names.
+
+Existing alternatives
+---------------------
+
+Guards
+^^^^^^
+
+The comparison can be expressed with a capture pattern plus a guard::
+
+    match setting:
+        case s if s is MISSING:
+            ...
+
+This form is longer and introduces the additional binding ``s``.  Guards
+also have two limitations when the value to be compared occurs inside a
+larger pattern.
+
+**Separation from the subpattern.**  A guard is written after the complete
+pattern.  A condition on a deeply nested value must therefore be separated
+from the position to which it applies.  The discussion includes `several
+examples from the pylint code base
+<https://discuss.python.org/t/107916/47>`__.  The following is adapted from
+one of them::
+
+    case nodes.Assign(
+        targets=[
+            nodes.Subscript(
+                value=nodes.Name(name=name),
+                slice=key_node,
+            )
+        ],
+        value=val_node,
+    ) if name == dict_name:
+        ...
+
+To understand the constraint on ``nodes.Name``, the reader must find its
+capture of ``name`` and then continue to the end of the pattern, where the
+guard compares it with the existing variable ``dict_name``.  This PEP
+allows the comparison to appear in the relevant subpattern and removes the
+temporary binding::
+
+    case nodes.Assign(
+        targets=[
+            nodes.Subscript(
+                value=nodes.Name(name=.dict_name),
+                slice=key_node,
+            )
+        ],
+        value=val_node,
+    ):
+        ...
+
+**Individual alternatives in an or-pattern.**  A guard applies to the
+entire pattern, not to one alternative within an or-pattern.  For example,
+suppose a case should match either a ``nodes.Name`` whose name equals
+``typing_name``, or any ``nodes.Class``.  The desired placement of the
+guard might be written as::
+
+    case nodes.Name(name=n) if n == typing_name | nodes.Class():
+        ...
+
+However, this does not create an or-pattern.  Everything after ``if`` is
+part of the guard expression, so ``| nodes.Class()`` is evaluated as part
+of that expression.  Placing the guard after an or-pattern does not work
+either::
+
+    case nodes.Name(name=n) | nodes.Class() if n == typing_name:
+        ...
+
+This form is invalid because alternatives in an or-pattern must bind the
+same set of names, and ``nodes.Class()`` does not bind ``n``.  Moreover, a
+guard in that position would apply to both alternatives.  The existing
+syntax therefore requires two cases, which may duplicate the case body::
+
+    case nodes.Name(name=n) if n == typing_name:
+        handle_node()
+    case nodes.Class():
+        handle_node()
+
+With this PEP, the value constraint can be part of the first alternative
+without introducing a binding, so the alternatives can remain in one
+pattern::
+
+    case nodes.Name(name=.typing_name) | nodes.Class():
+        handle_node()
+
+Wrapper namespaces
+^^^^^^^^^^^^^^^^^^
+
+:pep:`635` suggests putting constants into a class or enum.  This is
+available for constants controlled by the author, but changes how the
+constant is defined and referenced.  It cannot change the definitions
+provided by another library.  Importing the enclosing module instead of
+the name permits ``module.CONSTANT`` to be used as a dotted pattern, but
+requires a particular import style and does not apply to constants in the
+current module.
+
+Strings or enums instead of sentinels
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Values intended for matching can sometimes be defined as enum members or
+string literals.  However, :pep:`661` establishes sentinels as a supported
+way to represent values with distinct identity, and existing APIs may
+expose constants that are not enum members or literals.
+
+
+Rationale
+=========
+
+Why a leading dot
+-----------------
+
+The existing rule is: *a name pattern containing a dot is a lookup; a
+name pattern without a dot is a binding*.  The leading-dot form extends
+this rule to an unqualified name, for which the portion to the left of
+the dot is empty:
+
+* ``Color.RED`` -- lookup (status quo)
+* ``ui.colors.RED`` -- lookup (status quo)
+* ``.RED`` -- lookup (this PEP)
+* ``red`` -- binding (status quo)
+
+Under this proposal, the rule can be stated as: **a dot anywhere in a
+name pattern means lookup**.  The proposal does not add a keyword or
+operator, and it does not change the meaning of any existing pattern.
+
+Early drafts of :pep:`622` used this rule.  Swift also uses a leading dot
+for implicit member lookup in ``switch`` cases (``case .red:``), which is
+similar to the syntax proposed here when matching enums.
+
+In a `poll accompanying the discussion thread for this PEP
+<https://discuss.python.org/t/107916/61>`__, respondents could approve of
+multiple options.  Of the 34 respondents, 24 (71%) approved of the
+leading dot and 15 (44%) approved of the status quo.  The ``==``-prefix
+received 7 approvals (21%).  The
+``global``/``local`` and ``globals``/``locals`` forms, other
+keyword-based syntax, and curly brackets each received 5 approvals
+(15%).  The ``global``-only and ``is``-prefix forms each received 3
+approvals (9%), while the ``as is`` form received none.  Such polls
+measure the preferences of an interested, self-selected audience rather
+than the community at large, and are included here only as a summary of
+participants' preferences.
+
+Name resolution, not scope selection
+------------------------------------
+
+A leading dot in relative imports means "relative to the current
+package", and some participants in the discussion noted that
+``case .NAME:`` would similarly suggest "in the current namespace" and
+could therefore imply that names in outer scopes are excluded.  In this
+proposal, the dot does not select a scope.  The name after the dot is
+resolved as it would be in an ordinary expression at that location
+(local, enclosing, global, then builtin scope).  The dot determines only
+whether the pattern performs a lookup or a binding.  The leftmost name of
+an existing dotted value pattern such as ``module.CONSTANT`` is already
+resolved in this manner.
+
+Resolution in the builtin scope permits matching values that are otherwise
+available only as bare names.
+``NotImplemented`` and ``Ellipsis`` are constants that -- unlike
+``None``, ``True`` and ``False`` -- are ordinary names rather than
+keywords.  They consequently have capture semantics when used as bare
+patterns and cannot be qualified without importing ``builtins``.  The
+same applies to builtin types when the type object itself is the value
+being matched, for example when dispatching on a type stored in an
+annotation or configuration value::
+
+    match target_type:
+        case .int | .float:
+            return NumericColumn(target_type)
+        case .str:
+            return TextColumn()
+
+Note the difference from the class pattern ``case int():``, which
+matches *instances* of ``int``: the value pattern ``case .int:``
+matches the type object itself.
+
+Alternatives that make the scope explicit (``global.NAME``,
+``nonlocal.NAME``) are discussed under `Rejected Ideas`_.
+
+Visibility of the dot
+---------------------
+
+When the leading dot was dropped from :pep:`622`, one concern recorded in
+:pep:`635` was that the dot "would not be a visible-enough marker".
+Syntax highlighters can distinguish capture patterns from value patterns
+and make the difference between ``NAME`` and ``.NAME`` more visible.
+
+Python already uses a leading dot in relative imports (:pep:`328`).
+``from .config import DEFAULTS`` and ``from config import DEFAULTS``
+differ only by the dot, and both forms are valid.  The meaning of the dot
+in relative imports differs from this proposal, as discussed in
+`Name resolution, not scope selection`_ above.
+
+Swift provides another precedent for leading-dot syntax in pattern
+matching, as discussed in `Why a leading dot`_ above.
+
+Why now
+-------
+
+Several discussion participants suggested waiting to see how sentinels
+are used in practice before extending pattern syntax.  The distinction
+between capture and value patterns has, however, applied since Python
+3.10 to enums accessed through
+``from``-imports, module-level constants, and ad-hoc sentinels.
+:pep:`661` does not create this distinction, but it is expected to
+increase the use of unqualified sentinel names.  Adding the syntax in
+Python 3.16, one release after ``sentinel()``, would allow new
+sentinel-using APIs to document it as the standard pattern-matching form.
+
+
+Specification
+=============
+
+Grammar
+-------
+
+The pattern grammar of :pep:`634` is extended.  The ``value_pattern``
+rule gains a second alternative (using the notation of the :pep:`634`
+appendix)::
+
+    value_pattern:
+        | attr !('.' | '(' | '=')
+        | '.' NAME !('.' | '(' | '=')
+
+and the key of a mapping pattern item may likewise be a leading-dot
+name::
+
+    key_value_pattern:
+        | (literal_expr | attr | '.' NAME) ':' pattern
+
+The new form consists of exactly one dot followed by exactly one
+identifier.  Attribute chains after a leading dot (``.ns.CONST``) are
+not permitted; see `Rejected Ideas`_.  The name position of a class
+pattern is unchanged: ``case .SomeClass(x):`` is a syntax error, since a
+name followed by ``(`` is already unambiguously a lookup and needs no
+marker.
+
+Any identifier is allowed after the dot, including ``_``: ``case ._:``
+is a value pattern that looks up the name ``_``, not a wildcard.
+
+Semantics
+---------
+
+A leading-dot value pattern ``. NAME`` succeeds if and only if the value
+of ``NAME`` compares equal to the match subject (``subject == NAME``,
+evaluated as for other value patterns and literal patterns).  It never
+binds any name.
+
+``NAME`` is resolved using the standard name resolution rules, exactly
+as if it appeared as an expression at the location of the ``match``
+statement.  If the name is unbound, the usual ``NameError`` or
+``UnboundLocalError`` is raised when the pattern is attempted.
+
+As with the value patterns of :pep:`634`, an implementation may cache
+the looked-up value and may attempt the lookup fewer or more times than
+a naive reading suggests; user code relying on the number or timing of
+lookups or equality calls is not supported.
+
+A leading-dot value pattern is a refutable pattern.  It may appear
+anywhere a closed pattern may appear, including inside sequence,
+mapping, class, or-patterns and ``as``-patterns::
+
+    case [.START, *rest]: ...
+    case {"state": .DONE}: ...
+    case Node(kind=.LEAF): ...
+    case .RED | .GREEN | .BLUE as primary: ...
+
+Interaction with local scopes
+-----------------------------
+
+Because resolution follows the normal rules, a name that is assigned
+anywhere in the enclosing function -- including by a capture pattern in
+another case of the same ``match`` statement -- is a *local* name
+throughout that function.  The following raises ``UnboundLocalError``::
+
+    STOP = sentinel('STOP')
+
+    def run(msg):
+        match msg:
+            case .STOP:       # UnboundLocalError: 'STOP' is local here...
+                ...
+            case STOP:        # ...because this capture makes it local.
+                ...
+
+This is the same behavior the expression ``STOP`` would have anywhere
+else in such a function, and the same interaction already exists today
+between capture patterns and ordinary uses of a name.  Static analyzers
+are encouraged to warn when a leading-dot pattern refers to a name that
+is local to the current function, because the lookup may occur before
+the local name is bound.
+
+Typing
+------
+
+Type checkers should treat ``case .NAME:`` as they treat the equivalent
+value pattern today: narrowing the subject by the type of ``NAME``.  In
+particular, for sentinels as specified by :pep:`661`, matching
+``case .MISSING:`` against a subject of type ``int | MISSING`` should
+narrow the subject to ``MISSING`` in that case and to ``int`` in
+subsequent cases, enabling exhaustiveness checking.  This requires no
+new special cases beyond those type checkers already implement for
+value patterns and :pep:`661` narrowing.
+
+
+Backwards Compatibility
+=======================
+
+A dot at the start of a pattern is currently a syntax error, so this
+proposal does not change the meaning or validity of existing programs.
+:pep:`622` anticipated this property, noting when the rule was dropped
+that it "could be added back later with no backward-compatibility
+issues".
+
+Code using the new syntax will not run on Python 3.15 or earlier.  This
+affects only code that uses the new syntax.
+
+
+Security Implications
+=====================
+
+None known.  The new pattern evaluates a name lookup and an equality
+comparison, both of which the ``match`` statement already performs for
+existing value patterns.
+
+
+How to Teach This
+=================
+
+The rule presented in the :pep:`636` tutorial can be stated as follows:
+
+    In a pattern, a name **with a dot** is looked up and compared;
+    a name **without a dot** captures the subject.
+
+The leading-dot form can be introduced as "a value pattern whose
+namespace part is empty": you
+write ``Color.RED`` when the constant lives in a namespace and ``.RED``
+when it does not.  A sentinel example demonstrates the distinction::
+
+    MISSING = sentinel('MISSING')
+
+    match value:
+        case .MISSING:
+            ...   # value is the MISSING sentinel
+        case found:
+            ...   # anything else; bound to 'found'
+
+Documentation for the ``match`` statement, :pep:`636`'s tutorial
+appendix, and the ``sentinel()`` documentation should be updated
+together to show the leading-dot syntax for matching a sentinel.
+
+
+Reference Implementation
+========================
+
+None yet.
+
+
+Rejected Ideas
+==============
+
+Keeping the status quo
+----------------------
+
+The workarounds (guards, wrapper namespaces, importing the enclosing
+module) are described in the Motivation.  They have been available since
+structural pattern matching was introduced in Python 3.10.  Each requires
+either an additional binding, a change to the definition or import of a
+constant, or a qualification that is unavailable for constants in the
+current module.  They also do not change the capture semantics of
+``case CONSTANT:``.
+
+Other sigils
+------------
+
+Alternative one-character or operator-like markers were proposed in the
+original discussions and again in the thread for this PEP:
+``^CONSTANT`` (the "pin" operator, as in Elixir), ``$CONSTANT``,
+``?CONSTANT``, ``==CONSTANT``, ``{CONSTANT}``, and backticks.  None of
+these markers is currently used for lookup in Python patterns.  By
+contrast, a dot is already part of every dotted value pattern.  Curly
+braces could be confused with mapping patterns, while ``==CONSTANT``
+could imply support for other comparison operators.  General comparison
+patterns are outside the scope of this PEP, as discussed below.  In the
+community poll described in `Why a leading dot`_, each of these options
+received fewer approvals than the leading-dot form.
+
+Comparison-operator patterns (``case == CONSTANT:``, ``case is CONSTANT:``)
+----------------------------------------------------------------------------
+
+A prefixed operator would let the pattern choose its comparison
+semantics, and identity comparison is applicable to sentinels.  It would
+also require decisions about the supported operators, the expressions
+permitted on the right-hand side, and operator chaining.  Those decisions
+belong to a more general expression-pattern proposal.  This PEP retains
+the equality semantics of existing value patterns.  Sentinels do not
+override ``__eq__`` and therefore compare equal only to themselves.  A
+future proposal could consider expression patterns independently.
+
+Keyword-based markers (``value NAME``, ``constant case NAME:``)
+---------------------------------------------------------------
+
+Spellings such as ``case value MISSING:`` or a modified
+``constant case MISSING:`` clause are more visible than a dot, which
+was their primary advantage in the discussion.  These forms would add
+new soft keywords or keyword-like syntax.  A pattern-level form such as
+``case Node(kind=value LEAF):`` is less concise when nested, while a
+clause-level form cannot mark one subpattern within a larger pattern.
+
+Scope-qualified lookups (``global.NAME``, ``nonlocal.NAME``)
+------------------------------------------------------------
+
+Reusing the ``global`` and ``nonlocal`` keywords as pseudo-namespaces
+would make the scope of the lookup explicit.  It would also couple each
+pattern to the scope in which the constant is defined.  For example, a
+module-level constant would use ``global.NAME``, but moving it into an
+enclosing function would require changing its patterns to
+``nonlocal.NAME``.  These forms do not cover local names or builtins.
+The proposed extension ``local.NAME`` would require a new keyword because
+``local`` is currently an ordinary identifier.  Standard name resolution
+covers all of these scopes without additional syntax.  In addition,
+``nonlocal.NAME`` does not have an equivalent expression form elsewhere
+in Python.
+
+Parenthesized names (``case (NAME):``)
+--------------------------------------
+
+This form was rejected by :pep:`622`.  Parentheses around patterns are
+already used for grouping, so assigning lookup semantics to ``(NAME)``
+would make ``case (NAME):`` differ from ``case NAME:`` despite their
+current equivalence.  Adding or removing redundant parentheses would
+then change the pattern's meaning.
+
+Distinguishing by case of the name
+----------------------------------
+
+Treating ``UPPER_CASE`` names as constants was considered and rejected
+during the original pattern-matching design: no other part of core
+Python attaches semantics to the case of an identifier, and identifiers
+in scripts without a case distinction (e.g. CJK) could never be matched
+as values.
+
+Allowing attribute chains after the leading dot
+-----------------------------------------------
+
+``.ns.CONST`` would be exactly equivalent to ``ns.CONST``, providing a
+second spelling for existing syntax without adding a capability.
+Restricting the new form to a single identifier avoids this duplication.
+
+Special-casing sentinels only
+-----------------------------
+
+Since :pep:`661` gives each sentinel a distinct type, matching could be
+supported through class patterns, or sentinels could be special-cased as
+quasi-literals like ``None``.  But the problem is not specific to
+sentinels: any unqualified constant (a numeric constant, an
+interned default object, an enum member imported with
+``from module import MEMBER``) has the same issue.  Solving it for one
+kind of value would leave other unqualified constants unsupported and
+would add a sentinel-specific exception to the pattern grammar.
+
+Making lookup the default and marking captures instead
+------------------------------------------------------
+
+Revisiting the fundamental :pep:`634` decision (e.g. requiring ``?name``
+or ``name?`` for captures) would be backward incompatible and was
+considered in :pep:`622` and :pep:`642`.  This PEP does not change that
+decision.
+
+
+Acknowledgements
+================
+
+Thanks to the participants of the discuss.python.org thread, whose
+arguments -- both for and against -- shaped this document, and to the
+authors of :pep:`622`, :pep:`634`, :pep:`635` and :pep:`642`, whose
+thorough records of the original design discussion made it possible to
+address the earlier objections directly.
+
+
+Copyright
+=========
+
+This document is placed in the public domain or under the
+CC0-1.0-Universal license, whichever is more permissive.
