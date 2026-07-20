@@ -85,8 +85,9 @@ With this PEP, the sentinel case can be written as:
 
 .. code-block:: python
 
-    case {"proxy": .MISSING}:
-        autodetect_proxy()
+    match options:
+        case {"proxy": .MISSING}:
+            autodetect_proxy()
 
 Without this proposal, a bare name has capture semantics and there may be
 no namespace through which to qualify ``MISSING``.  As sentinel values are
@@ -120,16 +121,17 @@ one of them:
 
 .. code-block:: python
 
-    case nodes.Assign(
-        targets=[
-            nodes.Subscript(
-                value=nodes.Name(name=name),
-                slice=key_node,
-            )
-        ],
-        value=val_node,
-    ) if name == dict_name:
-        ...
+    match node:
+        case nodes.Assign(
+            targets=[
+                nodes.Subscript(
+                    value=nodes.Name(name=name),
+                    slice=key_node,
+                )
+            ],
+            value=val_node,
+        ) if name == dict_name:
+            ...
 
 To understand the constraint on ``nodes.Name``, the reader must find its
 capture of ``name`` and then continue to the end of the pattern, where the
@@ -139,16 +141,17 @@ temporary binding:
 
 .. code-block:: python
 
-    case nodes.Assign(
-        targets=[
-            nodes.Subscript(
-                value=nodes.Name(name=.dict_name),
-                slice=key_node,
-            )
-        ],
-        value=val_node,
-    ):
-        ...
+    match node:
+        case nodes.Assign(
+            targets=[
+                nodes.Subscript(
+                    value=nodes.Name(name=.dict_name),
+                    slice=key_node,
+                )
+            ],
+            value=val_node,
+        ):
+            ...
 
 **Individual alternatives in an or-pattern.**  A guard applies to the
 entire pattern, not to one alternative within an or-pattern.  For example,
@@ -158,8 +161,9 @@ guard might be written as:
 
 .. code-block:: python
 
-    case nodes.Name(name=n) if n == typing_name | nodes.Class():
-        ...
+    match node:
+        case nodes.Name(name=n) if n == typing_name | nodes.Class():
+            ...
 
 However, this does not create an or-pattern.  Everything after ``if`` is
 part of the guard expression, so ``| nodes.Class()`` is evaluated as part
@@ -168,8 +172,9 @@ either:
 
 .. code-block:: python
 
-    case nodes.Name(name=n) | nodes.Class() if n == typing_name:
-        ...
+    match node:
+        case nodes.Name(name=n) | nodes.Class() if n == typing_name:
+            ...
 
 This form is invalid because alternatives in an or-pattern must bind the
 same set of names, and ``nodes.Class()`` does not bind ``n``.  Moreover, a
@@ -178,10 +183,11 @@ syntax therefore requires two cases, which may duplicate the case body:
 
 .. code-block:: python
 
-    case nodes.Name(name=n) if n == typing_name:
-        handle_node()
-    case nodes.Class():
-        handle_node()
+    match node:
+        case nodes.Name(name=n) if n == typing_name:
+            handle_node()
+        case nodes.Class():
+            handle_node()
 
 With this PEP, the value constraint can be part of the first alternative
 without introducing a binding, so the alternatives can remain in one
@@ -189,8 +195,9 @@ pattern:
 
 .. code-block:: python
 
-    case nodes.Name(name=.typing_name) | nodes.Class():
-        handle_node()
+    match node:
+        case nodes.Name(name=.typing_name) | nodes.Class():
+            handle_node()
 
 Wrapper namespaces
 ^^^^^^^^^^^^^^^^^^
@@ -377,10 +384,11 @@ mapping, class, or-patterns and ``as``-patterns:
 
 .. code-block:: python
 
-    case [.START, *rest]: ...
-    case {"state": .DONE}: ...
-    case Node(kind=.LEAF): ...
-    case .RED | .GREEN | .BLUE as primary: ...
+    match value:
+        case [.START, *rest]: ...
+        case {"state": .DONE}: ...
+        case Node(kind=.LEAF): ...
+        case .RED | .GREEN | .BLUE as primary: ...
 
 Interaction with local scopes
 -----------------------------
