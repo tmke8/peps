@@ -43,7 +43,9 @@ as enums or classes so that they can be spelled as dotted names.  When a
 constant is not in a namespace, using its unqualified name creates a
 capture pattern rather than a value pattern.  Therefore, in the following,
 the first case does *not* check whether ``options['proxy']`` is equal to
-``MISSING``::
+``MISSING``:
+
+.. code-block:: python
 
     MISSING = sentinel('MISSING')
 
@@ -79,7 +81,9 @@ Sentinel values
 standard way to define constants such as ``MISSING`` above.  Such
 constants are useful when other values, including ``None``, already have
 defined meanings.  Sentinels are typically bound to module-level names.
-With this PEP, the sentinel case can be written as::
+With this PEP, the sentinel case can be written as:
+
+.. code-block:: python
 
     case {"proxy": .MISSING}:
         autodetect_proxy()
@@ -95,7 +99,9 @@ Existing alternatives
 Guards
 ^^^^^^
 
-The comparison can be expressed with a capture pattern plus a guard::
+The comparison can be expressed with a capture pattern plus a guard:
+
+.. code-block:: python
 
     match setting:
         case s if s is MISSING:
@@ -110,7 +116,9 @@ pattern.  A condition on a deeply nested value must therefore be separated
 from the position to which it applies.  The discussion includes `several
 examples from the pylint code base
 <https://discuss.python.org/t/107916/47>`__.  The following is adapted from
-one of them::
+one of them:
+
+.. code-block:: python
 
     case nodes.Assign(
         targets=[
@@ -127,7 +135,9 @@ To understand the constraint on ``nodes.Name``, the reader must find its
 capture of ``name`` and then continue to the end of the pattern, where the
 guard compares it with the existing variable ``dict_name``.  This PEP
 allows the comparison to appear in the relevant subpattern and removes the
-temporary binding::
+temporary binding:
+
+.. code-block:: python
 
     case nodes.Assign(
         targets=[
@@ -144,7 +154,9 @@ temporary binding::
 entire pattern, not to one alternative within an or-pattern.  For example,
 suppose a case should match either a ``nodes.Name`` whose name equals
 ``typing_name``, or any ``nodes.Class``.  The desired placement of the
-guard might be written as::
+guard might be written as:
+
+.. code-block:: python
 
     case nodes.Name(name=n) if n == typing_name | nodes.Class():
         ...
@@ -152,7 +164,9 @@ guard might be written as::
 However, this does not create an or-pattern.  Everything after ``if`` is
 part of the guard expression, so ``| nodes.Class()`` is evaluated as part
 of that expression.  Placing the guard after an or-pattern does not work
-either::
+either:
+
+.. code-block:: python
 
     case nodes.Name(name=n) | nodes.Class() if n == typing_name:
         ...
@@ -160,7 +174,9 @@ either::
 This form is invalid because alternatives in an or-pattern must bind the
 same set of names, and ``nodes.Class()`` does not bind ``n``.  Moreover, a
 guard in that position would apply to both alternatives.  The existing
-syntax therefore requires two cases, which may duplicate the case body::
+syntax therefore requires two cases, which may duplicate the case body:
+
+.. code-block:: python
 
     case nodes.Name(name=n) if n == typing_name:
         handle_node()
@@ -169,7 +185,9 @@ syntax therefore requires two cases, which may duplicate the case body::
 
 With this PEP, the value constraint can be part of the first alternative
 without introducing a binding, so the alternatives can remain in one
-pattern::
+pattern:
+
+.. code-block:: python
 
     case nodes.Name(name=.typing_name) | nodes.Class():
         handle_node()
@@ -253,7 +271,9 @@ keywords.  They consequently have capture semantics when used as bare
 patterns and cannot be qualified without importing ``builtins``.  The
 same applies to builtin types when the type object itself is the value
 being matched, for example when dispatching on a type stored in an
-annotation or configuration value::
+annotation or configuration value:
+
+.. code-block:: python
 
     match target_type:
         case .int | .float:
@@ -307,14 +327,18 @@ Grammar
 
 The pattern grammar of :pep:`634` is extended.  The ``value_pattern``
 rule gains a second alternative (using the notation of the :pep:`634`
-appendix)::
+appendix):
+
+.. code-block:: peg
 
     value_pattern:
         | attr !('.' | '(' | '=')
         | '.' NAME !('.' | '(' | '=')
 
 and the key of a mapping pattern item may likewise be a leading-dot
-name::
+name:
+
+.. code-block:: peg
 
     key_value_pattern:
         | (literal_expr | attr | '.' NAME) ':' pattern
@@ -349,7 +373,9 @@ lookups or equality calls is not supported.
 
 A leading-dot value pattern is a refutable pattern.  It may appear
 anywhere a closed pattern may appear, including inside sequence,
-mapping, class, or-patterns and ``as``-patterns::
+mapping, class, or-patterns and ``as``-patterns:
+
+.. code-block:: python
 
     case [.START, *rest]: ...
     case {"state": .DONE}: ...
@@ -362,7 +388,9 @@ Interaction with local scopes
 Because resolution follows the normal rules, a name that is assigned
 anywhere in the enclosing function -- including by a capture pattern in
 another case of the same ``match`` statement -- is a *local* name
-throughout that function.  The following raises ``UnboundLocalError``::
+throughout that function.  The following raises ``UnboundLocalError``:
+
+.. code-block:: python
 
     STOP = sentinel('STOP')
 
@@ -425,7 +453,9 @@ The rule presented in the :pep:`636` tutorial can be stated as follows:
 The leading-dot form can be introduced as "a value pattern whose
 namespace part is empty": you
 write ``Color.RED`` when the constant lives in a namespace and ``.RED``
-when it does not.  A sentinel example demonstrates the distinction::
+when it does not.  A sentinel example demonstrates the distinction:
+
+.. code-block:: python
 
     MISSING = sentinel('MISSING')
 
