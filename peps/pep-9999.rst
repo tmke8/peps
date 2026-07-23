@@ -1,7 +1,8 @@
 PEP: 9999
 Title: Leading-Dot Value Patterns
 Author: Thomas Kehrenberg <tmke8@posteo.net>
-Discussions-To: https://discuss.python.org/t/pattern-matching-on-constants-that-arent-in-a-namespace-especially-sentinels/107916
+Sponsor: Ethan Furman <ethan@stoneleaf.us>
+Discussions-To: Pending
 Status: Draft
 Type: Standards Track
 Created: 20-Jul-2026
@@ -16,7 +17,7 @@ This PEP extends the value patterns of structural pattern matching
 ``case .MISSING:``, is looked up using the normal name resolution
 rules and compared to the match subject by equality, instead of being
 treated as a capture pattern.  This makes it possible to match against
-constants that are not accessed through a namespace, including sentinel
+variables that are not accessed through a namespace, including sentinel
 values as introduced by :pep:`661` in Python 3.15, without using guards
 or wrapper namespaces.
 
@@ -225,7 +226,7 @@ Rationale
 Why a leading dot
 -----------------
 
-The existing rule is: *a name pattern containing a dot is a lookup; a
+The existing rule is: *a value pattern containing a dot is a lookup; a
 name pattern without a dot is a binding*.  The leading-dot form extends
 this rule to an unqualified name, for which the portion to the left of
 the dot is empty:
@@ -333,8 +334,7 @@ Grammar
 -------
 
 The pattern grammar of :pep:`634` is extended.  The ``value_pattern``
-rule gains a second alternative (using the notation of the :pep:`634`
-appendix):
+rule gains a second alternative:
 
 .. code-block:: peg
 
@@ -352,10 +352,7 @@ name:
 
 The new form consists of exactly one dot followed by exactly one
 identifier.  Attribute chains after a leading dot (``.ns.CONST``) are
-not permitted; see `Rejected Ideas`_.  The name position of a class
-pattern is unchanged: ``case .SomeClass(x):`` is a syntax error, since a
-name followed by ``(`` is already unambiguously a lookup and needs no
-marker.
+not permitted; see `Rejected Ideas`_. 
 
 Any identifier is allowed after the dot, including ``_``: ``case ._:``
 is a value pattern that looks up the name ``_``, not a wildcard.
@@ -432,14 +429,8 @@ value patterns and :pep:`661` narrowing.
 Backwards Compatibility
 =======================
 
-A dot at the start of a pattern is currently a syntax error, so this
-proposal does not change the meaning or validity of existing programs.
-:pep:`622` anticipated this property, noting when the rule was dropped
-that it "could be added back later with no backward-compatibility
-issues".
-
-Code using the new syntax will not run on Python 3.15 or earlier.  This
-affects only code that uses the new syntax.
+The change is fully backwards compatible. So far using ``.name``
+raised a ``SyntaxError``.
 
 
 Security Implications
