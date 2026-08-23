@@ -32,149 +32,91 @@ or wrapper namespaces:
 Motivation
 ==========
 
-Structural pattern matching distinguishes two kinds of name patterns:
-
-* A bare name such as ``side`` is a *capture pattern*: it always matches
-  and binds the subject to that name.
-* A dotted name such as ``Color.RED`` or ``dataclasses.MISSING`` is a
-  *value pattern*: the name is looked up and the result is compared to
-  the subject by equality.
-
-There is currently no way to use an unqualified name as a value
-pattern.  :pep:`635` recommends collecting constants in namespaces such
-as enums or classes so that they can be spelled as dotted names.  When a
-constant is not in a namespace, using its unqualified name creates a
-capture pattern rather than a value pattern.  Therefore, in order to check
-whether ``options['proxy']`` is equal to ``MISSING`` in the following example,
-the code must use a guard or a wrapper namespace. The code makes use of the
-``sentinel()`` builtin introduced in :pep:`661` to define a sentinel value for
-``MISSING``:
-
-.. code-block:: python
-
-    MISSING = sentinel('MISSING')
-
-    def configure_proxy(options):
-        match options:
-            case {"proxy": proxy} if proxy is MISSING:
-                autodetect_proxy()
-            case {"proxy": None}:
-                disable_proxy()
-            case {"proxy": ProxyConfig(host=host, port=port)}:
-                connect(host, port)
-
-We cannot write ``case {"proxy": MISSING}`` --- the way a beginner might --- because that would be a capture pattern that binds the value of ``options['proxy']`` to the name ``MISSING``.
-
-The use of the sentinel, ``MISSING``, is not frivolous here: ``None`` cannot represent
-"no setting given" because it already represents a meaningful setting
-("proxy explicitly disabled").
-
-While constants such as sentinels can often be placed in a namespace or be
-moved to their own module so that they can be accessed as dotted names, this is
-not possible or too cumbersome for function-local variables. It is unlikely
-that anyone would create a namespace inside a function just to hold a variable.
-
-Existing alternatives
----------------------
-
-Guards
-^^^^^^
-
-Matching against an unqualified name can be expressed with a capture pattern
-plus a guard:
+When the match statement was proposed in :pep:`634`, the decision was
+made to only support dotted names, i.e. attributes, in **value
+patterns** because it is not possible to differentiate simple names
+from **capture patterns**. This makes it especially difficult to
+match something against local variables e.g. function arguments. The
+current workaround for this limitation is to combine a name capture
+pattern with an explicit guard clause.
 
 .. code-block:: python
 
     BOOKS: dict[str, str]
 
-    def get_book_titles_for_author(author: str) -> Generator[str]:
+    def get_book_titles_for_author(author: str):
         for book in BOOKS:
             match book:
-                case (
-                    {"title": title, "author": book_author}
-                    if book_author == author
+                case {"title": title, "author": book_author} if (
+                    book_author == author
                 ):
                     yield title
 
-While this works, it is unnecessarily difficult to read and write, especially
-if the match cases get more complex. Furthermore, it has some additional
-limitations:
+While this works, it is unnecessarily difficult to read and write,
+especially if the match cases get more complex. Furthermore, it has
+some additional limitations:
 
-1. As a workaround, it might not get taught together with the value pattern. In
-   particular developers new to the match statement might find it difficult to
-   come up with at first.
-2. The guard clause is separate from the value pattern. For deeply nested
-   patterns, this increases the complexity while reading the match case. It is
-   necessary to keep track of all capture patterns mentally just for it to be
-   used in the guard clause. At which point it is not obvious whether or not
-   the name is also used in the case body as well.
+- As a workaround, it might not get taught together with the value
+  pattern. In particular developers new to the match statement might
+  find it difficult to come up with it at first.
 
-   .. code-block:: python
+- The guard clause is separate from the **value pattern**. For deeply
+  nested patterns, this increases the complexity while reading the
+  match case. It is necessary to keep track of all **capture patterns**
+  mentally just for it to be used in the guard clause. At which point
+  it is not obvious whether or not the name is also used in the case
+  body as well.
 
-       match node:
-           case nodes.Assign(
-               targets=[
-                   nodes.Subscript(
-                       value=nodes.Name(name=name),
-                       slice=key_node,
-                   )
-               ],
-               value=val_node,
-           ) if name == dict_name:
-               ...
+- The name being checked is often closely related or even the same as
+  the variable. In the example above both are ``author``. This makes
+  it necessary to choose a different, suboptimal name for the name
+  capture only to avoid accidentally overwriting the variable.
 
-3. The name being checked is often closely related or even the same as the
-   variable. In the example above both are ``author``. This makes it necessary
-   to choose a different, suboptimal name for the name capture only to avoid
-   accidentally overwriting the variable.
-4. Due to the similar names, it is also frequently not possible to
-   know by only reading the guard clause which is the name and which
-   the variable being checked.
-5. Combining the workaround with ``OR`` patterns is limited because
-   these require that name captures are defined in **all** alternatives.
-   This can make it necessary to duplicate the case body if an
-   alternative does not need the name capture.
-6. The guard clause is only checked after the pattern itself matches.
-   Especially for complex patterns, this can lead to unnecessary work
-   when the name capture is followed by other patterns. As the capture
-   always succeeds, the other patterns are evaluated even if it is
-   obvious to the outside observer that the guard will fail.
+- Due to the similar names, it is also frequently not possible to
+  know only by reading the guard clause which is the name and which
+  the variable being checked.
 
+- Combining the workaround with ``OR`` patterns is limited because
+  these require that name captures are defined in **all** alternatives.
+  This can make it necessary to duplicate the case body if an
+  alternative does not need the name capture.
 
-Wrapper namespaces
-^^^^^^^^^^^^^^^^^^
+- The guard clause is only checked after the pattern itself matches.
+  Especially for complex patterns, this can lead to unnecessary work
+  when the name capture is followed by other patterns. As the capture
+  always succeeds, the other patterns are evaluated even if it is
+  obvious to the outside observer that the guard will fail.
 
-:pep:`635` suggests putting constants into a class or enum.  This is
-available for constants controlled by the author, but changes how the
-constant is defined and referenced.  It cannot change the definitions
-provided by another library.  Importing the enclosing module instead of
-the name permits ``module.CONSTANT`` to be used as a dotted pattern, but
-requires a particular import style and does not apply to constants in the
-current module.
+This PEP picks up on a deferred suggestion from :pep:`635` to use a
+leading dot for **value patterns** with names. The example above could
+then be written as:
 
-Other workarounds
-^^^^^^^^^^^^^^^^^
+.. code-block:: python
 
-Values intended for matching can sometimes be defined as enum members or
-string literals.  However, :pep:`661` establishes sentinels as a supported
-way to represent values with distinct identity, and existing APIs may
-expose constants that are not enum members or literals.
+    def get_book_titles_for_author(author: str):
+        for book in BOOKS:
+            match book:
+                case {"title": title, "author": .author}:
+                    yield title
+
+Matching global variables
+-------------------------
+
+A similar issue exists when trying to match a subject against global
+variables, in particular those defined in the same module. While other
+workaround exist to be able to use the attribute syntax, for example
+the variable could be moved to another module or be wrapped by an enum
+or namespace, it is often desired to keep existing code as is when
+using a match statement.
+
+This might especially be the case for sentinels added in :pep:`661`.
 
 Specification
 =============
 
-Semantics
----------
-
-The leading-dot value pattern, ``.NAME``, is a new form of value pattern.
-``NAME`` is resolved using the standard name resolution rules, exactly
-as if it appeared as an expression at the location of the ``match``
-statement.  If the name is unbound, the usual ``NameError`` or
-``UnboundLocalError`` is raised when the pattern is attempted.
-
-Apart from this, the semantics of a leading-dot value pattern are the same as
-those of dotted value patterns.
-
+The value pattern will be extended to support simple names, besides
+attributes, if they are prefixed by a leading dot. The lookup is
+performed following the standard Python name resolution rules.
 
 Grammar
 -------
