@@ -12,13 +12,12 @@ Python-Version: 3.16
 Abstract
 ========
 
-This PEP enables the use of unqualified names as **value patterns** in
-match statements. A name prefixed with a dot is looked up using the
-normal name resolution rules and compared to the match subject by
-equality similar to other value patterns, instead of being treated
-as a **capture pattern**. This makes it possible to match local
-variables and global variables defined in the same module without
-using a guard clause.
+This PEP enables the use of unqualified names as **value patterns** in match
+statements. A name prefixed with a dot is looked up using the normal name
+resolution rules and compared to the match subject by equality in the same
+manner as existing value patterns, instead of being treated as a **capture
+pattern**. This makes it possible to match local variables and global variables
+defined in the same module without using a guard clause.
 
 .. code-block:: python
 
@@ -40,15 +39,14 @@ Structural pattern matching distinguishes two kinds of name patterns:
   *value pattern*: the name is looked up and the result is compared to
   the subject by equality.
 
-There is currently no way to use an unqualified name as a value
-pattern.  :pep:`635` recommends collecting constants in namespaces such
-as enums or classes so that they can be spelled as dotted names.  When a
-constant is not in a namespace, using its unqualified name creates a
-capture pattern rather than a value pattern.  Therefore, in order to check
-whether ``options['proxy']`` is equal to ``MISSING`` in the following example,
-the code must use a guard or a wrapper namespace. The code makes use of the
-``sentinel()`` builtin introduced in :pep:`661` to define a sentinel value for
-``MISSING``:
+There is currently no way to use an unqualified name as a value pattern.
+:pep:`635` recommends collecting constants in namespaces such as enums or
+classes so that they can be spelled as dotted names.  When a constant is not in
+a namespace, using its unqualified name creates a capture pattern rather than a
+value pattern.  Therefore, in order to check whether ``options['proxy']`` is
+equal to ``MISSING`` in the following example, the code must use a guard or a
+wrapper namespace. The code makes use of the ``sentinel()`` builtin introduced
+in :pep:`661` to define a sentinel value for ``MISSING``:
 
 .. code-block:: python
 
@@ -63,10 +61,12 @@ the code must use a guard or a wrapper namespace. The code makes use of the
             case {"proxy": ProxyConfig(host=host, port=port)}:
                 connect(host, port)
 
-We cannot write ``case {"proxy": MISSING}`` --- the way a beginner might --- because that would be a capture pattern that binds the value of ``options['proxy']`` to the name ``MISSING``.
+We cannot write ``case {"proxy": MISSING}`` --- the way a beginner might ---
+because that would be a capture pattern that binds the value of
+``options['proxy']`` to the name ``MISSING``.
 
-The use of the sentinel, ``MISSING``, is not frivolous here: ``None`` cannot represent
-"no setting given" because it already represents a meaningful setting
+The use of the sentinel, ``MISSING``, is not frivolous here: ``None`` cannot
+represent "no setting given" because it already represents a meaningful setting
 ("proxy explicitly disabled").
 
 While constants such as sentinels can often be placed in a namespace or be
@@ -228,10 +228,9 @@ Under this proposal, the rule can be stated as: **a dot anywhere in a
 name pattern means lookup**.  The proposal does not add a keyword or
 operator, and it does not change the meaning of any existing pattern.
 
-This rule was mentioned in :pep:`635` but was deferred as no consensus
-could be reached at the time and it could always be added later without
-backward-compatibility issues. Early drafts of :pep:`622`
-used this rule.
+This rule was considered in :pep:`635` but was deferred as no consensus could
+be reached at the time and it could always be added later without
+backward-compatibility issues. Early drafts of :pep:`622` used this rule.
 
 In a `poll accompanying the discussion thread for this PEP
 <https://discuss.python.org/t/107916/61>`__, respondents could approve of
