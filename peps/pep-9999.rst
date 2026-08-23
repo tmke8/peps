@@ -108,21 +108,6 @@ limitations:
    necessary to keep track of all capture patterns mentally just for it to be
    used in the guard clause. At which point it is not obvious whether or not
    the name is also used in the case body as well.
-
-   .. code-block:: python
-
-       match node:
-           case nodes.Assign(
-               targets=[
-                   nodes.Subscript(
-                       value=nodes.Name(name=name),
-                       slice=key_node,
-                   )
-               ],
-               value=val_node,
-           ) if name == dict_name:
-               ...
-
 3. The name being checked is often closely related or even the same as the
    variable. In the example above both are ``author``. This makes it necessary
    to choose a different, suboptimal name for the name capture only to avoid
@@ -240,24 +225,22 @@ alternatives (discussed below) and over the status quo.
 Visibility of the dot
 ---------------------
 
-One concern noted in
-:pep:`635` was that the dot "would not be a visible-enough marker".
-We disagree.
-
-Syntax highlighters can distinguish capture patterns from value patterns
-and make the difference between ``NAME`` and ``.NAME`` more visible.
-
-Besides, Python already uses a leading dot in relative imports (:pep:`328`):
-``from .config import DEFAULTS`` and ``from config import DEFAULTS``
-differ only by the dot, and both forms are valid.
+One concern noted in :pep:`635` was that the dot "would not be a visible-enough
+marker". We disagree.
 
 We believe that the ease of teaching and using the rule outweighs the concerns
 about visibility. Alternatives such as the guard clause workaround are often
-more difficult to read, where one is not able to tell which is the variable and
-which is the capture pattern.
+more difficult to read, including situations where one is not able to tell
+which is the variable and which is the capture pattern.
 
-Swift provides another precedent for leading-dot syntax in pattern
-matching.
+Furthermore, Python already uses a leading dot in relative imports
+(:pep:`328`): ``from .config import DEFAULTS`` and ``from config import
+DEFAULTS`` differ only by the dot, and both forms are valid.
+
+Additionally, syntax highlighters could distinguish capture patterns from value
+patterns and make the difference between ``NAME`` and ``.NAME`` more visible.
+
+Other languages, like Swift, also use leading dots in pattern matching.
 
 
 Backwards Compatibility
