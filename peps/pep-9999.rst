@@ -1,6 +1,6 @@
 PEP: 9999
 Title: Leading-Dot Value Patterns
-Author: Thomas Kehrenberg <tmke8@posteo.net>
+Author: Thomas Kehrenberg <tmke8@posteo.net>, Marc Mueller
 Sponsor: Ethan Furman <ethan@stoneleaf.us>
 Discussions-To: Pending
 Status: Draft
@@ -12,17 +12,17 @@ Python-Version: 3.16
 Abstract
 ========
 
-This PEP enables the use of unqualified names as value patterns in structural pattern matching
-(:pep:`634`).  A name prefixed with a dot, as in
-``case .MISSING:``, is looked up using the normal name resolution
-rules and compared to the match subject by equality, instead of being
-treated as a capture pattern.  This makes it possible to match against
-variables that are not accessed through a namespace, without using guards
-or wrapper namespaces:
+This PEP enables the use of unqualified names as **value patterns** in
+match statements. A name prefixed with a dot is looked up using the
+normal name resolution rules and compared to the match subject by
+equality similar to other value patterns, instead of being treated
+as a **capture pattern**. This makes it possible to match local
+variables and global variables defined in the same module without
+using a guard clause.
 
 .. code-block:: python
 
-    def get_book_titles_for_author(author: str) -> Generator[str]:
+    def get_book_titles_for_author(author: str):
         for book in BOOKS:
             match book:
                 case {"title": title, "author": .author}:
@@ -149,8 +149,8 @@ Rationale
 Why a leading dot
 -----------------
 
-The existing rule is: *a value pattern containing a dot is a lookup; a
-name pattern without a dot is a binding*.  The leading-dot form extends
+The existing rule is: **a value pattern containing a dot is a lookup; a
+name pattern without a dot is a binding**.  The leading-dot form extends
 this rule to an unqualified name, for which the portion to the left of
 the dot is empty:
 
@@ -170,14 +170,14 @@ Under this proposal, the rule can be stated as: **a dot anywhere in a
 name pattern means lookup**.  The proposal does not add a keyword or
 operator, and it does not change the meaning of any existing pattern.
 
-This rule was mentioned in :pep:`635` but was its adoption was deferred as no
-consensus could be reached at the time and it could always be added later
-without backward-compatibility issues. Early drafts of :pep:`622` used this
-rule.
+This rule was mentioned in :pep:`635` but was deferred as no consensus
+could be reached at the time and it could always be added later without
+backward-compatibility issues. Early drafts of :pep:`622`
+used this rule.
 
 In a `poll accompanying the discussion thread for this PEP
 <https://discuss.python.org/t/107916/61>`__, respondents could approve of
-multiple options. The majority (71%) prefered the leading-dot syntax over the
+multiple options. The majority (71%) preferred the leading-dot syntax over the
 alternatives (discussed below) and over the status quo.
 
 Visibility of the dot
@@ -213,9 +213,7 @@ raised a ``SyntaxError``.
 Security Implications
 =====================
 
-None known.  The new pattern evaluates a name lookup and an equality
-comparison, both of which the ``match`` statement already performs for
-existing value patterns.
+There are no new security implications from this proposal.
 
 
 How to Teach This
@@ -226,10 +224,9 @@ The rule presented in the :pep:`636` tutorial can be stated as follows:
     In a pattern, a name **with a dot** is looked up and compared;
     a name **without a dot** captures the subject.
 
-The leading-dot form can be introduced as "a value pattern whose namespace part
-is empty": you write ``Color.RED`` when the constant lives in a separate
-namespace and ``.RED`` when it does not.  A sentinel example demonstrates the
-distinction:
+The leading-dot form can be introduced as "a value pattern whose
+namespace part is empty": you write ``Color.RED`` when the constant
+lives in a separate namespace and ``.RED`` when it does not.
 
 .. code-block:: python
 
@@ -241,8 +238,8 @@ distinction:
         case found:  # capture pattern; always matches and binds
             ...
 
-Documentation for the ``match`` statement should be updated to show the
-leading-dot syntax for matching a sentinel.
+Documentation for the ``match`` statement will be updated to include
+the leading-dot syntax.
 
 
 Reference Implementation
