@@ -12,13 +12,12 @@ Python-Version: 3.16
 Abstract
 ========
 
-This PEP enables the use of unqualified names as **value patterns** in
-match statements. A name prefixed with a dot is looked up using the
-normal name resolution rules and compared to the match subject by
-equality similar to other value patterns, instead of being treated
-as a **capture pattern**. This makes it possible to match local
-variables and global variables defined in the same module without
-using a guard clause.
+This PEP enables the use of unqualified names as **value patterns** in match
+statements. A name prefixed with a dot is looked up using the normal name
+resolution rules and compared to the match subject by equality in the same
+manner as existing value patterns, instead of being treated as a **capture
+pattern**. This makes it possible to match local variables and global variables
+defined in the same module without using a guard clause.
 
 .. code-block:: python
 
@@ -170,10 +169,9 @@ Under this proposal, the rule can be stated as: **a dot anywhere in a
 name pattern means lookup**.  The proposal does not add a keyword or
 operator, and it does not change the meaning of any existing pattern.
 
-This rule was mentioned in :pep:`635` but was deferred as no consensus
-could be reached at the time and it could always be added later without
-backward-compatibility issues. Early drafts of :pep:`622`
-used this rule.
+This rule was considered in :pep:`635` but was deferred as no consensus could
+be reached at the time and it could always be added later without
+backward-compatibility issues. Early drafts of :pep:`622` used this rule.
 
 In a `poll accompanying the discussion thread for this PEP
 <https://discuss.python.org/t/107916/61>`__, respondents could approve of
