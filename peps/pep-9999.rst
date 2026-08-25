@@ -5,7 +5,7 @@ Sponsor: Ethan Furman <ethan@stoneleaf.us>
 Discussions-To: Pending
 Status: Draft
 Type: Standards Track
-Created: 20-Jul-2026
+Created: 25-Aug-2026
 Python-Version: 3.16
 
 
@@ -52,7 +52,7 @@ explicit guard clause.
                     yield title
 
 While this works, it is unnecessarily difficult to read and write, especially
-if the match cases get more complex. Furthermore, it has some additional
+if the match case gets more complex. Furthermore, it has some additional
 limitations:
 
 - As a workaround, it might not get taught together with the value pattern. In
@@ -67,8 +67,8 @@ limitations:
 
 - The name being checked is often closely related or even the same as the
   variable. In the example above both are ``author``. This makes it necessary
-  to choose a different, suboptimal name for the name capture only to avoid
-  accidentally overwriting the variable.
+  to choose a different, often suboptimal name for the name capture only to
+  avoid accidentally overwriting the variable.
 
 - Due to the similar names, it is also frequently not possible to know only by
   reading the guard clause which is the name and which the variable being
@@ -103,8 +103,8 @@ Matching global variables
 
 A similar issue exists when trying to match a subject against global variables,
 in particular those defined in the same module. While other workaround exist to
-be able to use the attribute syntax---for example the variable could be moved
-to another module or be wrapped by an enum or namespace---it is often desired
+be able to use the attribute syntax --- for example the variable could be moved
+to another module or be wrapped by an enum or namespace --- it is often desired
 to keep existing code as is when using a match statement.
 
 This might especially be the case for sentinels added in :pep:`661`. Sentinels
@@ -139,8 +139,7 @@ and the key of a mapping pattern item may likewise be a leading-dot name:
         | (literal_expr | attr | '.' NAME) ':' pattern
 
 The new form consists of exactly one dot followed by exactly one identifier.
-Attribute chains after a leading dot (``.ns.CONST``) are not permitted; see
-`Rejected Ideas`_. 
+Attribute chains after a leading dot (``.ns.CONST``) are not permitted.
 
 
 Rationale
@@ -149,8 +148,8 @@ Rationale
 Why a leading dot
 -----------------
 
-The existing rule is: **a value pattern containing a dot is a lookup; a name
-pattern without a dot is a binding**.  The leading-dot form extends this rule
+The existing rule is: "**a value pattern containing a dot is a lookup; a name
+pattern without a dot is a binding**".  The leading-dot form extends this rule
 to an unqualified name, for which the portion to the left of the dot is empty:
 
 +-------------------+----------------------+
@@ -160,18 +159,19 @@ to an unqualified name, for which the portion to the left of the dot is empty:
 +-------------------+----------------------+
 | ``ui.colors.RED`` | lookup (status quo)  |
 +-------------------+----------------------+
-| ``.RED``          | lookup (this PEP)    |
+| ``.RED``          | lookup (new)         |
 +-------------------+----------------------+
 | ``red``           | binding (status quo) |
 +-------------------+----------------------+
 
-Under this proposal, the rule can be stated as: **a dot anywhere in a name
-pattern means lookup**.  The proposal does not add a keyword or operator, and
+Under this proposal, the rule can be stated as: "**a dot anywhere in a name
+pattern means lookup**".  The proposal does not add a keyword or operator, and
 it does not change the meaning of any existing pattern.
 
 This rule was considered in :pep:`635` but was deferred as no consensus could
 be reached at the time and it could always be added later without
-backward-compatibility issues. Early drafts of :pep:`622` used this rule.
+backward-compatibility issues. The predecessor PEP for pattern matching
+:pep:`622` used this rule.
 
 In a `poll accompanying the discussion thread for this PEP
 <https://discuss.python.org/t/107916/61>`__, respondents could approve of
@@ -186,11 +186,11 @@ marker". We disagree.
 
 We believe that the ease of teaching and using the rule outweighs the concerns
 about visibility. Alternatives such as the guard clause workaround are often
-more difficult to read, including situations where one is not able to tell
-which is the variable and which is the capture pattern.
+more difficult to read, in particular in more complex match cases where
+the guard clause is separate from the value pattern.
 
-Furthermore, Python already uses a leading dot in relative imports
-(:pep:`328`): ``from .config import DEFAULTS`` and ``from config import
+Furthermore, Python already uses a leading dot in relative imports:
+``from .config import DEFAULTS`` and ``from config import
 DEFAULTS`` differ only by the dot, and both forms are valid.
 
 Additionally, syntax highlighters could distinguish capture patterns from value
@@ -221,8 +221,8 @@ The rule presented in the :pep:`636` tutorial can be stated as follows:
     **without a dot** captures the subject.
 
 The leading-dot form can be introduced as "a value pattern whose namespace part
-is empty": you write ``Color.RED`` when the constant lives in a separate
-namespace and ``.RED`` when it does not.
+is empty": you write ``helpers.MISSING`` when the constant lives in a separate
+namespace and ``.MISSING`` when it does not.
 
 .. code-block:: python
 
@@ -332,7 +332,7 @@ than a scope-restricted lookup.
 
 Resolution in the builtin scope also permits matching values that are otherwise
 available only as bare names. ``NotImplemented`` and ``Ellipsis`` are constants
-that---unlike ``None``, ``True`` and ``False`` ---are ordinary names rather
+that --- unlike ``None``, ``True`` and ``False`` --- are ordinary names rather
 than keywords.  They consequently have capture semantics when used as bare
 patterns and cannot be qualified without importing ``builtins``.  The same
 applies to builtin types when the type object itself is the value being
