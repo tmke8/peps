@@ -1,4 +1,4 @@
-PEP: 9999
+PEP: 845
 Title: Leading-Dot Value Patterns
 Author: Thomas Kehrenberg <tmke8@posteo.net>, Marc Mueller
 Sponsor: Ethan Furman <ethan@stoneleaf.us>
