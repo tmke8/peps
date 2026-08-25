@@ -291,7 +291,7 @@ Distinguishing by case of the name
 Treating ``UPPER_CASE`` names as constants was considered and rejected during
 the original pattern-matching design: no other part of core Python attaches
 semantics to the case of an identifier, and identifiers in scripts without a
-case distinction (e.g. CJK) could never be matched as values.
+case distinction (e.g. CJK characters) could never be matched as values.
 
 Allowing attribute chains after the leading dot
 -----------------------------------------------
